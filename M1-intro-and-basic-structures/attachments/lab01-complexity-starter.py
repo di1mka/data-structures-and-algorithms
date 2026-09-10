@@ -60,31 +60,48 @@ POW_CALLS = 20_000    # вызовов binary_pow на один замер: ин
 
 
 def array_sum(a: list[int]) -> int:
-    """Сумма элементов массива. Ожидаемая сложность: TODO (обосновать в отчёте)."""
-    # TODO: реализовать циклом
-    raise NotImplementedError
+    """Сумма элементов массива. Ожидаемая сложность: O(n) (обосновать в отчёте)."""
+    s = 0
+    for x in a:
+        s += x
+    return s
 
 
 def array_max(a: list[int]) -> int:
-    """Максимум массива (массив непуст). Ожидаемая сложность: TODO."""
-    # TODO: реализовать циклом
-    raise NotImplementedError
+    """Максимум массива (массив непуст). Ожидаемая сложность: O(n)."""
+    # Берем первый элемент за максимум и линейно сравниваем с остальными
+    mx = a[0]
+    for x in a[1:]:
+        if x > mx:
+            mx = x
+    return mx
 
 
 def count_equal_pairs(a: list[int]) -> int:
-    """Число пар (i, j), i < j, таких что a[i] == a[j]. Ожидаемая сложность: TODO."""
-    # TODO: реализовать двойным циклом
-    raise NotImplementedError
+    """Число пар (i, j), i < j, таких что a[i] == a[j]. Ожидаемая сложность: O(n^2)."""
+    k = 0
+    length = len(a)
+    # Классический двойной цикл, чтобы проверить каждую уникальную пару
+    for i in range(length):
+        for j in range(i + 1, length):
+            if a[i] == a[j]:
+                k += 1
+    return k
 
 
 def binary_pow(x: int, n: int, mod: int | None = None) -> int:
-    """Бинарное возведение в степень, n >= 0. Ожидаемая сложность: TODO.
-
-    При заданном mod все умножения выполняются по модулю (результат x**n % mod).
-    """
-    # TODO: реализовать через квадрирование; при mod применять % mod после
-    # каждого умножения
-    raise NotImplementedError
+    """Бинарное возведение в степень, n >= 0. Ожидаемая сложность: O(log n)."""
+    r = 1
+    while n > 0:
+        if n % 2 == 1:
+            r *= x
+            if mod is not None:
+                r %= mod
+        x *= x
+        if mod is not None:
+            x %= mod
+        n //= 2
+    return r
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +186,12 @@ def self_check() -> None:
         x, n = rng.randint(2, 50), rng.randint(0, 64)
         assert binary_pow(x, n, mod=POW_MOD) == pow(x, n, POW_MOD)
 
-    # TODO: добавить собственные проверки инвариантов и описать их в отчёте
+    # 1. Сумма пустого массива равна 0
+    assert array_sum([]) == 0
+    # 2. Количество равных пар в массиве, где все элементы уникальны, равно 0
+    assert count_equal_pairs([1, 2, 3, 4, 5]) == 0
+    # 3. Любое число в степени 0 равно 1
+    assert binary_pow(12345, 0) == 1
     # (например: count_equal_pairs на массиве из попарно различных элементов = 0).
     print("self_check: OK")
 
