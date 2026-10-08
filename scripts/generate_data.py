@@ -10,6 +10,8 @@
 Наборы (аргумент --only):
   arrays      — массивы целых чисел: случайные / отсортированные / обратно
                 отсортированные / с большим числом дубликатов (ЛР 1, 3, 4, 6);
+  ops         — последовательности операций над стеком и деком и размеры
+                серий append для динамического массива (ЛР 2);
   texts       — тексты над малым алфавитом и «естественные» псевдослова из слогов
                 плюс шаблоны с гарантированными вхождениями (ЛР 7);
   pairs       — строковые ключи user_XXXX с управляемой долей повторов (ЛР 8);
@@ -71,7 +73,87 @@ def generate_arrays(out_dir: Path, seed: int,
 
 
 # ---------------------------------------------------------------------------
-# 2. Тексты и шаблоны (ЛР 7)
+# 2. Операции над линейными структурами (ЛР 2)
+# ---------------------------------------------------------------------------
+
+OPS_LENGTH = 100_000
+OPS_MAX_SIZE = 5_000
+APPEND_SIZE_RANGE = (1_000, 200_000)
+STACK_OPS = {"push": 1, "pop": 0, "peek": 0}  # операция -> число аргументов
+DEQUE_OPS = {"push_front": 1, "push_back": 1, "pop_front": 0, "pop_back": 0}
+
+
+def _ops_walk(rng: random.Random, n_ops: int, max_size: int,
+              pushes: tuple[str, ...], pops: tuple[str, ...],
+              peek: str | None) -> list[str]:
+    """Случайное блуждание размера структуры фазами «рост до цели — спад до нуля».
+
+    Цель фазы равномерна по логарифмической шкале на [1, max_size], поэтому
+    встречаются и крошечные структуры, и структуры в тысячи элементов, а размер
+    пересекает границы роста ёмкости в обе стороны. После спада иногда следует
+    операция над пустой структурой — эталон на ней бросает IndexError.
+    """
+    lines: list[str] = []
+    size = 0
+
+    def step(grow: bool) -> None:
+        nonlocal size
+        if peek is not None and rng.random() < 0.1:
+            lines.append(peek)
+        elif rng.random() < (0.7 if grow else 0.3):
+            lines.append(f"{rng.choice(pushes)} {rng.randrange(1_000_000)}")
+            size += 1
+        else:
+            lines.append(rng.choice(pops))
+            size = max(0, size - 1)
+
+    while len(lines) < n_ops:
+        target = int(max_size ** rng.random())
+        while size < target and len(lines) < n_ops:
+            step(grow=True)
+        while size > 0 and len(lines) < n_ops:
+            step(grow=False)
+        if rng.random() < 0.5:
+            lines.append(rng.choice(pops if peek is None else (*pops, peek)))
+    return lines[:n_ops]
+
+
+def generate_ops(out_dir: Path, seed: int, n_ops: int = OPS_LENGTH,
+                 max_size: int = OPS_MAX_SIZE, n_sizes: int = 8) -> list[Path]:
+    """Операции над стеком и деком и размеры серий append.
+
+    ops_stack.txt и ops_deque.txt — по одной операции в строке: «push 17», «pop»,
+    «peek» для стека; «push_front 17», «push_back 17», «pop_front», «pop_back»
+    для дека (сторона выбирается случайно). Последовательности многократно
+    опустошают структуру и содержат операции над пустой структурой.
+
+    ops_append_sizes.txt — размеры серий append по одному в строке: n_sizes
+    значений, по одному на равный отрезок логарифмической шкалы
+    APPEND_SIZE_RANGE, и пара 2**k, 2**k + 1 — размер ровно перед расширением
+    буфера с начальной ёмкостью-степенью двойки и сразу после него.
+    """
+    rng = random.Random(seed)
+    sequences = {
+        "ops_stack.txt": _ops_walk(rng, n_ops, max_size, ("push",), ("pop",), "peek"),
+        "ops_deque.txt": _ops_walk(rng, n_ops, max_size, ("push_front", "push_back"),
+                                   ("pop_front", "pop_back"), None),
+    }
+    lo, hi = APPEND_SIZE_RANGE
+    sizes = {int(lo * (hi / lo) ** ((i + rng.random()) / n_sizes)) for i in range(n_sizes)}
+    k = rng.randint(lo.bit_length(), hi.bit_length() - 2)  # 2**k + 1 < hi
+    sizes |= {2 ** k, 2 ** k + 1}
+    sequences["ops_append_sizes.txt"] = [str(n) for n in sorted(sizes)]
+
+    paths = []
+    for name, lines in sequences.items():
+        path = out_dir / name
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        paths.append(path)
+    return paths
+
+
+# ---------------------------------------------------------------------------
+# 3. Тексты и шаблоны (ЛР 7)
 # ---------------------------------------------------------------------------
 
 SMALL_ALPHABET = "abcdefg"
@@ -122,7 +204,7 @@ def generate_texts(out_dir: Path, seed: int, length: int = 1_000_000,
 
 
 # ---------------------------------------------------------------------------
-# 3. Строковые ключи (ЛР 8)
+# 4. Строковые ключи (ЛР 8)
 # ---------------------------------------------------------------------------
 
 
@@ -139,7 +221,7 @@ def generate_pairs(out_dir: Path, seed: int, n_keys: int = 100_000,
 
 
 # ---------------------------------------------------------------------------
-# 4. Журнал событий ОС с аномалиями (ДЗ 3, кейс ГК «Астра»)
+# 5. Журнал событий ОС с аномалиями (ДЗ 3, кейс ГК «Астра»)
 # ---------------------------------------------------------------------------
 
 EVENT_TYPES = ("login", "logout", "exec", "net_conn", "file_read", "file_write", "priv_esc")
@@ -276,7 +358,7 @@ def generate_logs(out_dir: Path, seed: int, n_events: int = 100_000,
 
 
 # ---------------------------------------------------------------------------
-# 5. Псевдо-эмбеддинги резюме и вакансий (ДЗ 4, кейс hh.ru)
+# 6. Псевдо-эмбеддинги резюме и вакансий (ДЗ 4, кейс hh.ru)
 # ---------------------------------------------------------------------------
 
 
@@ -336,6 +418,7 @@ def generate_embeddings(out_dir: Path, seed: int, n_resumes: int = 2_000,
 
 GENERATORS = {
     "arrays": generate_arrays,
+    "ops": generate_ops,
     "texts": generate_texts,
     "pairs": generate_pairs,
     "logs": generate_logs,
@@ -350,7 +433,7 @@ def write_manifest(out_dir: Path, variant: int, seed: int,
     """Записать/обновить manifest.json — паспорт сгенерированных данных.
 
     Манифест позволяет заготовкам лабораторных проверить, что данные в каталоге
-    действительно относятся к заявленному варианту (см. lab01-complexity-starter.py).
+    действительно относятся к заявленному варианту (см. заготовки ЛР 1 и ЛР 2).
     При повторном запуске с другим --only сведения о наборах накапливаются;
     смена варианта обнуляет манифест. Временных меток в файле нет: при одном
     варианте манифест, как и данные, совпадает побайтно.
