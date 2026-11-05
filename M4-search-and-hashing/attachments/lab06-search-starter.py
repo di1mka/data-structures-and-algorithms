@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""ЛР 6. Линейный, бинарный и интерполяционный поиск — стартовая заготовка.
+"""ЛР 6. Линейный, бинарный и интерполяционный поиск (вариант 7)."""
 
-Заготовка — это каркас, а не решение: заполните все TODO самостоятельно
-в соответствии с КИМ-06 и правилами использования генеративного ИИ
-(docs/ai-verification.md).
-
-Каждая функция поиска работает с отсортированным по неубыванию массивом
-и возвращает пару (индекс найденного элемента или -1, число сравнений ключей).
-
-Запуск: python lab06-search-starter.py --variant N
-"""
 from __future__ import annotations
 
 import argparse
@@ -18,6 +9,7 @@ import bisect
 import random
 import statistics
 import time
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # 1. Алгоритмы поиска (реализуются вручную, без in/index/bisect в основной части)
@@ -25,26 +17,47 @@ import time
 
 
 def linear_search(a: list[int], key: int) -> tuple[int, int]:
-    """Линейный поиск первого вхождения key.
+    """Линейный поиск первого вхождения key в отсортированном по неубыванию массиве.
 
     Возвращает (индекс первого вхождения или -1, число сравнений ключей).
-    Ожидаемая сложность: TODO (обосновать в отчёте).
+    Ожидаемая сложность: O(n) в среднем и худшем случаях, O(1) в лучшем случае.
     """
-    # TODO: реализовать проход слева направо со счётчиком сравнений
-    raise NotImplementedError
+    comparisons = 0
+    for i, val in enumerate(a):
+        comparisons += 1
+        if val == key:
+            return i, comparisons
+        if val > key:
+            # Массив отсортирован по неубыванию: дальше элементы только >= val > key
+            return -1, comparisons
+    return -1, comparisons
 
 
 def binary_search(a: list[int], key: int) -> tuple[int, int]:
     """Бинарный поиск key в отсортированном массиве.
 
     Возвращает (индекс любого вхождения или -1, число сравнений ключей).
-    Аккуратно поддерживайте инвариант обеих границ lo и hi: искомый элемент,
-    если он есть, всегда лежит в текущем отрезке; цикл обязан завершаться.
-    Ожидаемая сложность: TODO.
+    Поддерживает инвариант замкнутого отрезка [lo, hi]: если key присутствует
+    в массиве, он гарантированно лежит в a[lo..hi]. На каждом шаге длина
+    отрезка строго уменьшается (lo = mid + 1 или hi = mid - 1).
+    Ожидаемая сложность: O(log n) в среднем и худшем случаях.
     """
-    # TODO: реализовать через инвариант границ lo <= hi (или lo < hi — но
-    # TODO: тогда согласовать вычисление mid и сужение отрезка!)
-    raise NotImplementedError
+    lo = 0
+    hi = len(a) - 1
+    comparisons = 0
+
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        comparisons += 1
+        val = a[mid]
+        if val == key:
+            return mid, comparisons
+        if val < key:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+
+    return -1, comparisons
 
 
 def interpolation_search(a: list[int], key: int) -> tuple[int, int]:
@@ -52,11 +65,44 @@ def interpolation_search(a: list[int], key: int) -> tuple[int, int]:
 
     Возвращает (индекс любого вхождения или -1, число сравнений ключей).
     Позиция зонда: mid = lo + (key - a[lo]) * (hi - lo) // (a[hi] - a[lo]).
-    Обязательно защититься от деления на ноль при a[hi] == a[lo] и от выхода
-    key за пределы [a[lo], a[hi]]. Средняя сложность на равномерных данных: TODO.
+    Защищён от деления на ноль при a[hi] == a[lo] и от выхода key за [a[lo], a[hi]].
+    Средняя сложность на равномерных данных: O(log log n);
+    худший случай на сильно неравномерных (экспоненциальных) данных: O(n).
     """
-    # TODO: реализовать с зондом по формуле интерполяции и счётчиком сравнений
-    raise NotImplementedError
+    n = len(a)
+    if n == 0:
+        return -1, 0
+
+    lo = 0
+    hi = n - 1
+    comparisons = 0
+
+    while lo <= hi:
+        # Проверка попадания ключа в текущий диапазон значений [a[lo], a[hi]]
+        comparisons += 1
+        if key < a[lo] or key > a[hi]:
+            return -1, comparisons
+
+        # Защита от деления на ноль, когда все элементы на отрезке [lo, hi] равны
+        if a[hi] == a[lo]:
+            comparisons += 1
+            if a[lo] == key:
+                return lo, comparisons
+            return -1, comparisons
+
+        # Вычисление позиции зонда по линейной интерполяции
+        mid = lo + (key - a[lo]) * (hi - lo) // (a[hi] - a[lo])
+
+        comparisons += 1
+        val = a[mid]
+        if val == key:
+            return mid, comparisons
+        if val < key:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+
+    return -1, comparisons
 
 
 # ---------------------------------------------------------------------------
@@ -74,8 +120,7 @@ def make_dataset(n: int, distribution: str, rng: random.Random) -> list[int]:
     raise ValueError(f"неизвестное распределение: {distribution!r}")
 
 
-def pick_keys(a: list[int], rng: random.Random, count: int,
-              present: bool) -> list[int]:
+def pick_keys(a: list[int], rng: random.Random, count: int, present: bool) -> list[int]:
     """count ключей для серии поисков: присутствующие берутся из массива,
     отсутствующие подбираются вне множества его значений."""
     if present:
@@ -109,6 +154,9 @@ def self_check() -> None:
         # Один элемент: найден / не найден.
         assert fn([7], 7)[0] == 0, f"{name}: один элемент, ключ найден"
         assert fn([7], 3)[0] == -1, f"{name}: один элемент, ключ отсутствует"
+        # Массив из одинаковых элементов (проверка защиты от деления на ноль)
+        assert fn([5, 5, 5, 5], 5)[0] != -1, f"{name}: одинаковые элементы (найден)"
+        assert fn([5, 5, 5, 5], 3)[0] == -1, f"{name}: одинаковые элементы (не найден)"
         # Первый, последний и отсутствующие ключи (внутри и вне диапазона).
         a = [1, 3, 3, 5, 8, 13, 21]
         assert fn(a, 1)[0] == 0, f"{name}: первый элемент"
@@ -129,8 +177,6 @@ def self_check() -> None:
             idx, cmp_count = fn(a, key)
             assert cmp_count >= 1, f"{name}: счётчик сравнений не ведётся"
             if present:
-                # При дубликатах бинарный/интерполяционный могут вернуть
-                # любое вхождение — проверяем значение по индексу.
                 assert idx != -1 and a[idx] == key, f"{name}: ключ не найден"
             else:
                 assert idx == -1, f"{name}: найден отсутствующий ключ"
@@ -145,8 +191,8 @@ def self_check() -> None:
 # ---------------------------------------------------------------------------
 
 SIZES = [1_000, 3_000, 10_000, 30_000, 100_000]
-REPEATS = 5      # число повторов серии замеров (берётся медиана)
-N_KEYS = 200     # число ключей в одной серии поисков
+REPEATS = 5  # число повторов серии замеров (берётся медиана)
+N_KEYS = 200  # число ключей в одной серии поисков
 
 
 def bench(fn, a: list[int], keys: list[int]) -> float:
@@ -167,10 +213,16 @@ def mean_comparisons(fn, a: list[int], keys: list[int]) -> float:
     return statistics.mean(fn(a, k)[1] for k in keys)
 
 
-def run_benchmarks(seed: int) -> None:
+def run_benchmarks(seed: int) -> dict:
     rng = random.Random(seed)
+    results: dict = {"uniform": {}, "exponential": {}}
+
     for distribution in ("uniform", "exponential"):
         print(f"\nРаспределение: {distribution}")
+        for present in (True, False):
+            label = "есть" if present else "нет"
+            results[distribution][label] = {name: [] for name, _ in ALGORITHMS}
+
         for n in SIZES:
             a = make_dataset(n, distribution, rng)
             for present in (True, False):
@@ -178,24 +230,93 @@ def run_benchmarks(seed: int) -> None:
                 label = "есть" if present else "нет"
                 for name, fn in ALGORITHMS:
                     if name == "linear" and n > 30_000:
-                        continue  # линейный поиск: большие n занимают минуты
-                    print(f"  n={n:>7}  ключ {label:<4}  {name:<13}"
-                          f"  сравнений={mean_comparisons(fn, a, keys):>10.1f}"
-                          f"  t={bench(fn, a, keys):.6f} c")
-    # TODO: построить графики «среднее число сравнений от n» и «время от n»
-    # TODO: (matplotlib, отдельно для каждого распределения) и включить в отчёт;
-    # TODO: объяснить, когда интерполяционный поиск превосходит бинарный
-    # TODO: и на каких данных он деградирует к O(n).
+                        continue  # линейный поиск: большие n занимают много времени
+                    mc = mean_comparisons(fn, a, keys)
+                    t = bench(fn, a, keys)
+                    results[distribution][label][name].append((n, mc, t))
+                    print(
+                        f"  n={n:>7}  ключ {label:<4}  {name:<13}"
+                        f"  сравнений={mc:>10.1f}  t={t:.6f} c"
+                    )
+    return results
+
+
+def plot_results(results: dict, out_dir: Path) -> None:
+    """Построение графиков среднего числа сравнений и времени от n."""
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("\nmatplotlib не установлен — график пропущен.")
+        return
+
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    dist_titles = {
+        "uniform": "Равномерное распределение (uniform)",
+        "exponential": "Экспоненциальное распределение (exponential)",
+    }
+    markers = {"linear": "s", "binary": "o", "interpolation": "^"}
+
+    for col, dist in enumerate(("uniform", "exponential")):
+        ax_cmp = axes[0, col]
+        ax_time = axes[1, col]
+
+        for label, style in (("есть", "-"), ("нет", "--")):
+            for name, _ in ALGORITHMS:
+                pts = results[dist][label][name]
+                if not pts:
+                    continue
+                ns = [p[0] for p in pts]
+                cmps = [p[1] for p in pts]
+                ts = [p[2] for p in pts]
+                legend_lbl = f"{name} (ключ {label})"
+                ax_cmp.plot(
+                    ns, cmps, linestyle=style, marker=markers[name], label=legend_lbl
+                )
+                ax_time.plot(
+                    ns, ts, linestyle=style, marker=markers[name], label=legend_lbl
+                )
+
+        ax_cmp.set_xscale("log")
+        ax_cmp.set_yscale("log")
+        ax_cmp.set_title(f"Число сравнений от n — {dist_titles[dist]}")
+        ax_cmp.set_xlabel("Размер массива n")
+        ax_cmp.set_ylabel("Среднее число сравнений (лог. шкала)")
+        ax_cmp.grid(True, which="both", linestyle="--", linewidth=0.5)
+        ax_cmp.legend(fontsize=8)
+
+        ax_time.set_xscale("log")
+        ax_time.set_yscale("log")
+        ax_time.set_title(f"Время серии из {N_KEYS} поисков от n — {dist_titles[dist]}")
+        ax_time.set_xlabel("Размер массива n")
+        ax_time.set_ylabel("Время выполнения t, с (лог. шкала)")
+        ax_time.grid(True, which="both", linestyle="--", linewidth=0.5)
+        ax_time.legend(fontsize=8)
+
+    fig.tight_layout()
+    out_path = out_dir / "lab06_search.png"
+    fig.savefig(out_path, dpi=150)
+    print(f"\nГрафик сохранён:\n  {out_path}")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--variant", type=int, required=True, help="номер варианта")
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=Path(__file__).resolve().parent,
+        help="каталог для сохранения графика",
+    )
     args = ap.parse_args()
     seed = 30 + args.variant
+    print(f"Запуск ЛР-06: вариант {args.variant}, seed={seed}")
     random.seed(seed)
     self_check()
-    run_benchmarks(seed)
+    results = run_benchmarks(seed)
+    plot_results(results, args.out)
 
 
 if __name__ == "__main__":
